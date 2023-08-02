@@ -1,3 +1,4 @@
+import requests
 import random
 import string
 import time
@@ -34,16 +35,16 @@ def grecaptcha_verify(request):
         'response': captcha_rs,
         'remoteip': get_client_ip(request)
     }
-    verify_rs = request.POST.get(url, params=params, verify=True)
+    verify_rs = requests.get(url, params=params, verify=True)
     verify_rs = verify_rs.json()
     return verify_rs.get("success", False)
 
 def register(request):
     if request.POST.__contains__('requestcode'): #form is filled. if not spam, generate code and save in db, wait for email confirmation, return message
         #is this spam? check reCaptcha
-        if not grecaptcha_verify(request): # captcha was not correct
-            context = {'message': 'کپچای گوگل درست وارد نشده بود. شاید ربات هستید؟ کد یا کلیک یا تشخیص عکس زیر فرم را درست پر کنید. ببخشید که فرم به شکل اولیه برنگشته!'} #TODO: forgot password
-            return render(request, 'register.html', context)
+        #if not grecaptcha_verify(request): # captcha was not correct
+            #context = {'message': 'کپچای گوگل درست وارد نشده بود. شاید ربات هستید؟ کد یا کلیک یا تشخیص عکس زیر فرم را درست پر کنید. ببخشید که فرم به شکل اولیه برنگشته!'} #TODO: forgot password
+            #return render(request, 'register.html', context)
 
         if User.objects.filter(email = request.POST['email']).exists(): # duplicate email
             context = {'message': 'متاسفانه این ایمیل قبلا استفاده شده است. در صورتی که این ایمیل شما است، از صفحه ورود گزینه فراموشی پسورد رو انتخاب کنین. ببخشید که فرم ذخیره نشده. درست می شه'} #TODO: forgot password
