@@ -61,7 +61,7 @@ def register(request):
                 temporarycode.save()
                 message = PMMail(api_key = settings.POSTMARK_API_TOKEN,
                                  subject = "فعال سازی اکانت بستون",
-                                 sender = "sehat.mahdii@gmail.com",
+                                 sender = "sehat.mahdii@qxyz.com ",
                                  to = email,
                                  text_body = "برای فعال سازی اکانت بستون خود روی لینک روبرو کلیک کنید: http://bestoon.ir/accounts/register/?email={}&code={}".format(email, code),
                                  tag = "Account Request")
