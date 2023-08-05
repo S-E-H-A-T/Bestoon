@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password
 from .models import User, Token, Expense, Income, Passwordresetcodes
 from postmark import PMMail
+from django.db.models import Sum, Count
 
 # Create your views here.
 
@@ -89,6 +90,18 @@ def register(request):
     else:
         context = {'message': ''}
         return render(request, 'register.html', context)
+
+@csrf_exempt
+def generalstat(request):
+    this_token = request.POST['token']
+    this_user = User.objects.filter(token__token = this_token).get()
+    income = Income.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
+    expense = Expense.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
+    contex = {}
+    contex['expense'] = expense
+    contex['income'] = income
+    return JsonResponse( contex, encoder=JSONEncoder)
+
 
 def index(request):
     context = {}
