@@ -8,6 +8,11 @@
   input: date (optional), text, amount, token
   output: status:ok
 
+/accounts/login/
+  POST, request a json
+  input: username, password
+  output: status:ok & token
+
 /q/generalstat/
   POST, returns a json
   input: fromdate (optional), todate(optional), token
