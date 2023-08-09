@@ -5,7 +5,7 @@ import time
 from json import JSONEncoder
 from datetime import datetime
 from django.conf import settings
-from django.shortcuts import render
+from django.shortcuts import render , get_object_or_404
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -13,6 +13,8 @@ from django.contrib.auth.hashers import make_password , check_password
 from .models import User, Token, Expense, Income, Passwordresetcodes
 from postmark import PMMail
 from django.db.models import Sum, Count
+from django.views.decorators.http import require_POST
+from .utils import RateLimited
 
 # Create your views here.
 
@@ -41,15 +43,15 @@ def grecaptcha_verify(request):
     return verify_rs.get("success", False)
 
 @csrf_exempt
+@require_POST
 def login(request):
     if request.POST.__contains__('username') and request.POST.__contains__('password'):
         username = request.POST['username']    
         password = request.POST['password']
-        this_user = User.objects.get(username = username)
+        this_user = get_object_or_404(User, username = username)
         if (check_password(password, this_user.password)):
-            this_token = Token.objects.get(user = this_user)
-            token = this_token.token
-            
+            this_token = get_object_or_404(Token, user = this_user)
+            token = this_token.token 
             context = {}
             context['result'] = 'ok'
             context['token'] = token
@@ -112,15 +114,27 @@ def register(request):
         return render(request, 'register.html', context)
 
 @csrf_exempt
+@require_POST
+def whoami(request):
+        this_token = request.POST['token']  # TODO: Check if there is no `token`- done-please Check it
+        # Check if there is a user with this token; will retun 404 instead.
+        this_user = get_object_or_404(User, token__token=this_token)
+
+        return JsonResponse({
+            'user': this_user.username,
+        }, encoder=JSONEncoder)
+
+@csrf_exempt
+@require_POST
 def generalstat(request):
     this_token = request.POST['token']
-    this_user = User.objects.filter(token__token = this_token).get()
+    this_user = get_object_or_404(User, token__token = this_token)
     income = Income.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
     expense = Expense.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
     contex = {}
     contex['expense'] = expense
     contex['income'] = income
-    return JsonResponse( contex, encoder=JSONEncoder)
+    return JsonResponse(contex, encoder=JSONEncoder)
 
 
 def index(request):
@@ -129,32 +143,32 @@ def index(request):
 
 
 @csrf_exempt
+@require_POST
 def submit_income(request):
-    
-    
-    
     this_token = request.POST['token']
-    this_user = User.objects.filter(token__token = this_token).get()
+    this_user = get_object_or_404(User, token__token = this_token)
     if 'date' not in request.POST:
         date = datetime.now()
+    else:
+        date = request.POST['date']
     Income.objects.create(user = this_user, amount=request.POST['amount'],
-            text = request.POST['text'], date=date)
+                          text = request.POST['text'], date=date)
     
     return JsonResponse({
         'status': 'ok'
     }, encoder=JSONEncoder)
 
 @csrf_exempt
+@require_POST
 def submit_expense(request):
-    
-    
-    
     this_token = request.POST['token']
-    this_user = User.objects.filter(token__token = this_token).get()
+    this_user = get_object_or_404(User, token__token = this_token)
     if 'date' not in request.POST:
         date = datetime.now()
+    else:
+        date = request.POST['date']
     Expense.objects.create(user = this_user, amount=request.POST['amount'],
-            text = request.POST['text'], date=date)
+                           text = request.POST['text'], date=date)
     
     return JsonResponse({
         'status': 'ok'
