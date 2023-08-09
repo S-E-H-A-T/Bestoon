@@ -5,42 +5,29 @@ import time
 from json import JSONEncoder
 from datetime import datetime
 from django.conf import settings
+from django.core import serializers
 from django.shortcuts import render , get_object_or_404
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import make_password , check_password
-from .models import User, Token, Expense, Income, Passwordresetcodes
+from .models import User, Token, Expense, Income, Passwordresetcodes, News
 from postmark import PMMail
 from django.db.models import Sum, Count
 from django.views.decorators.http import require_POST
-from .utils import RateLimited
+from .utils import grecaptcha_verify, RateLimited
 
 # Create your views here.
 
 random_str = lambda N: ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(N))
 
-def get_client_ip(request):
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 
-def grecaptcha_verify(request):
-    data = request.POST
-    captcha_rs = data.get('g-recaptcha-response')
-    url = "https://www.google.com/recaptcha/api/siteverify"
-    params = {
-        'secret': settings.RECAPTCHA_SECRET_KEY,
-        'response': captcha_rs,
-        'remoteip': get_client_ip(request)
-    }
-    verify_rs = requests.get(url, params=params, verify=True)
-    verify_rs = verify_rs.json()
-    return verify_rs.get("success", False)
+@csrf_exempt
+def news(request):
+    news = News.objects.all().order_by('-date')[:11]
+    news_serialized = serializers.serialize("json", news)
+    return JsonResponse(news_serialized, encoder=JSONEncoder, safe=False)
 
 @csrf_exempt
 @require_POST
@@ -64,10 +51,14 @@ def login(request):
         
 def register(request):
     if request.POST.__contains__('requestcode'): #form is filled. if not spam, generate code and save in db, wait for email confirmation, return message
-        #is this spam? check reCaptcha
-        #if not grecaptcha_verify(request): # captcha was not correct
-            #context = {'message': 'کپچای گوگل درست وارد نشده بود. شاید ربات هستید؟ کد یا کلیک یا تشخیص عکس زیر فرم را درست پر کنید. ببخشید که فرم به شکل اولیه برنگشته!'} #TODO: forgot password
-            #return render(request, 'register.html', context)
+        # is this spam? check reCaptcha
+        # if not grecaptcha_verify(request): # captcha was not correct
+        #     context = {'message': 'کپچای گوگل درست وارد نشده بود. شاید ربات هستید؟ کد یا کلیک یا تشخیص عکس زیر فرم را درست پر کنید. ببخشید که فرم به شکل اولیه برنگشته!'} #TODO: forgot password
+        #     return render(request, 'register.html', context)
+        # if not grecaptcha_verify(request):  # captcha was not correct
+        #     context = {
+        #         'message': 'کپچای گوگل درست وارد نشده بود. شاید ربات هستید؟ کد یا کلیک یا تشخیص عکس زیر فرم را درست پر کنید. ببخشید که فرم به شکل اولیه برنگشته!'}  # TODO: forgot password
+        #     return render(request, 'register.html', context)
 
         if User.objects.filter(email = request.POST['email']).exists(): # duplicate email
             context = {'message': 'متاسفانه این ایمیل قبلا استفاده شده است. در صورتی که این ایمیل شما است، از صفحه ورود گزینه فراموشی پسورد رو انتخاب کنین. ببخشید که فرم ذخیره نشده. درست می شه'} #TODO: forgot password
@@ -126,15 +117,35 @@ def whoami(request):
 
 @csrf_exempt
 @require_POST
+def query_expenses(request):
+    this_token = request.POST['token']
+    num = request.POST.get('num', 10)
+    this_user = get_object_or_404(User, token__token = this_token)
+    expenses = Income.objects.filter(user = this_user).order_by('-date')[:num]
+    expenses_serialized = serializers.serialize("json", expenses)
+    return JsonResponse(expenses_serialized, encoder=JSONEncoder, safe=False)
+
+@csrf_exempt
+@require_POST
+def query_incomes(request):
+    this_token = request.POST['token']
+    num = request.POST.get('num', 10)
+    this_user = get_object_or_404(User, token__token = this_token)
+    incomes = Income.objects.filter(user = this_user).order_by('-date')[:num]
+    incomes_serialized = serializers.serialize("json", incomes)
+    return JsonResponse(incomes_serialized, encoder=JSONEncoder, safe=False)
+
+@csrf_exempt
+@require_POST
 def generalstat(request):
     this_token = request.POST['token']
     this_user = get_object_or_404(User, token__token = this_token)
     income = Income.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
     expense = Expense.objects.filter(user = this_user).aggregate(Count('amount'), Sum('amount'))
-    contex = {}
-    contex['expense'] = expense
-    contex['income'] = income
-    return JsonResponse(contex, encoder=JSONEncoder)
+    context = {}
+    context['expense'] = expense
+    context['income'] = income
+    return JsonResponse(context, encoder=JSONEncoder)
 
 
 def index(request):
